@@ -2,12 +2,11 @@
 #
 # Performs the snapshot creation and blockcommit maintenance of virtual
 # machines.
-
+set -x
 # Set constant variables for script.
 VM_NAME="${1}"
 VM_DIR="${2}${VM_NAME}/"
-VM_FILE="${VM_NAME}.qcow2"
-VM_DISK=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
+VM_FILE="${VM_DIR}${VM_NAME}.qcow2"
 VM_STATE_INITIAL="$(virsh domstate ${VM_NAME})"
 
 SNAPSHOT_DIR="${VM_DIR}snapshots/"
@@ -39,10 +38,14 @@ function result_handler() {
   local fail_message="${3}"
   if [[ ${result_code} -eq 0 ]]; then
     logger "${success_message}"
-  else
+  elif [[ ${result_code} -ge 1 && ${result_code} -le 255 ]]; then
+    # A hard failure that aborts the process, covering all exit codes.
     logger "${fail_message}"
     logger "The process was aborted."
     exit 1
+  else
+    # A soft failure that continues the process, beyond the exit codes range.
+    logger "${fail_message}"
   fi
 }
 
@@ -67,6 +70,7 @@ function validate_dir() {
     local result_code=1
   else
     create_dir "${dir}"
+    local result_code=0
   fi
   result_handler \
     ${result_code} \
@@ -85,27 +89,19 @@ function create_dir() {
     "The ${dir} directory could not be created."
 }
 
-# Evalutes and sets the current state of the virtual machine.
-function evaluate_vm_state() {
-  local vm_state="${1}"
-  case "${vm_state}" in
-    "shut off")
-      local result_code=0
-      vm_state_current="${vm_state}"
-      ;;
-    "running")
-      local result_code=0
-      vm_state_current="${vm_state}"
-      ;;
-    *)
-      local result_code=1
-      vm_state_current="${vm_state}"
-      ;;
-  esac
+# Evalutes if virtual machine is in an expected state.
+function determine_vm_state() {
+  vm_state_current="$(virsh domstate ${VM_NAME})"
+  if [[ "${vm_state_current}" == "shut off" || \
+  "${vm_state_current}" == "running" ]]; then
+    local result_code=0
+  else
+    local result_code=1
+  fi
   result_handler \
     ${result_code} \
-    "The ${VM_NAME} virtual machine is ${vm_state}." \
-    "The ${VM_NAME} virtual machine is in an unexpected ${vm_state} state."
+    "The ${VM_NAME} virtual machine is in the ${vm_state_current} state." \
+    "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
 }
 
 # Starts the virtual machines.
@@ -119,11 +115,26 @@ function start_vm() {
   sleep 10 # TODO(codygriffin): Change to 60 after development
 }
 
+# Sets the virtual machine AppArmor Profile to complain which is required
+# before performing a blockcommit.
+function apparmor_complain() {
+  aa-complain "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
+  local result_code=$?
+  result_handler \
+    ${result_code} \
+    "The ${VM_NAME} virtual machine AppArmor Profile was set to complain mode." \
+    "The ${VM_NAME} virtual machine AppArmor Profile could not be set to complain mode."
+}
+
 # Creates the external, disk-only snapshot without metadata.
 function create_snapshot() {
+  local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
+  local new_snapshot_name="${VM_NAME}$(date +%Y%m%d%H%M%S)"
+  local new_snapshot_file="${new_snapshot_name}.qcow2"
   virsh snapshot-create-as \
-    --domain "${VM_NAME}" "${new_snapshot_name}" \
-    --diskspec "${VM_DISK[0]}",file="${SNAPSHOT_DIR}${new_snapshot_file}",snapshot=external \
+    --domain "${VM_NAME}" \
+    --name "${new_snapshot_name}" \
+    --diskspec "${vm_disk[0]}",file="${SNAPSHOT_DIR}${new_snapshot_file}",snapshot=external \
     --disk-only \
     --atomic \
     --no-metadata
@@ -134,6 +145,20 @@ function create_snapshot() {
     "The ${new_snapshot_name} snapshot could not be created."
 }
 
+# Sets the virtual machine AppArmor Profile to enforce after performing
+# a blockcommit.
+function apparmor_enforce() {
+  aa-enforce "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
+  local result_code=$?
+  if [[ ${result_code} -eq 1 ]]; then
+    result_code=300
+  fi
+  result_handler \
+    ${result_code} \
+    "The ${VM_NAME} virtual machine AppArmor Profile was set to enforce mode." \
+    "The ${VM_NAME} virtual machine AppArmor Profile could not be set to enforce mode."
+  # TODO(codygriffin): Shutdown and reboot virtual machine if fails
+}
 
 validate_vm "${VM_NAME}"
 
@@ -141,19 +166,31 @@ validate_dir "${LOG_DIR}"
 
 validate_dir "${SNAPSHOT_DIR}"
 
-# RESUME HERE
-evaluate_vm_state "${VM_STATE_INITIAL}"
+determine_vm_state 
 
-# temporarily disable AppArmor for the virtual machine
+if [[ "${vm_state_current}" == "shut off" ]]; then
+  start_vm
+fi
+
+apparmor_complain
 
 create_snapshot
 
-# reenable AppArmor for the virtual machine
+# perform blockcommit
+local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
+qemu-img info --force-share --backing-chain "${vm_disk[1]}"
+existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}$*") )
+if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
+  virsh blockcommit \
+    --domain "${VM_NAME}" \
+    --path "${vm_disk[0]}" \
+    --base "${VM_FILE}" \
+    --top "${existing_snapshot_files[0]}" \
+    --delete \
+    --verbose \
+    --wait
+fi
+
+apparmor_enforce
 
 # shutdown virtual machine based on initial vm state
-
-
-new_snapshot_name="${VM_NAME}$(date +%Y%m%d%H%M%S)"
-new_snapshot_file="${new_snapshot_name}.qcow2"
-existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}${VM_NAME}*.qcow2") )
-existing_snapshot_count=$(echo ${#existing_snapshot_files[@]})
