@@ -27,7 +27,7 @@ function validate_vm() {
 
 # Determines whether or not to abort based command outcome.
 function error_handler() {
-  if [[ ${1} -ne 0 ]]
+  if [[ ${1} -ne 0 ]]; then
     # Aborts when any value other than 0 is returned.
     logger "${2}"
     logger "The process was aborted."
