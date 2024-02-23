@@ -19,95 +19,69 @@ LOG_FILE="${VM_NAME}$(date +%Y%m%d%H%M%S).txt"
 function validate_vm() {
   local vm_name_regex="\<${1}\>"
   local existing_vm=( $(virsh list --name --all) )
-  if [[ ${existing_vm[@]} =~ ${vm_name_regex} && -f "${VM_FILE}" ]]; then
-    local result_code=0
-  else
-    local result_code=1
+  if [[ !  ${existing_vm[@]} =~ ${vm_name_regex} && -f "${VM_FILE}" ]]; then
+    error handler 1 "The ${VM_NAME} virtual machine and/or its ${VM_FILE} do not exist."
   fi
-  result_handler \
-    ${result_code} \
-    "The ${VM_NAME} virtual machine and its ${VM_FILE} exist." \
-    "The ${VM_NAME} virtual machine and/or its ${VM_FILE} do not exist."
+  logger "The ${VM_NAME} virtual machine and its ${VM_FILE} exist."
 }
 
-# Evaluates an exit code and sends corresponding message to be written to the
-# log file.
-function result_handler() {
-  local result_code=${1}
-  local success_message="${2}"
-  local fail_message="${3}"
-  if [[ ${result_code} -eq 0 ]]; then
-    logger "${success_message}"
-  else
-    logger "${fail_message}"
+# Determines whether or not to abort based command outcome.
+function error_handler() {
+  if [[ ${1} -ne 0 ]]
+    # Aborts when any value other than 0 is returned.
+    logger "${2}"
     logger "The process was aborted."
     exit 1
   fi
+  # Otherwise does not abort.
+  logger "${2}"
 }
 
 # Writes a message to log file.
 function logger() {
-  local message="${1}"
-  if [ -d "${LOG_DIR}" ]; then
-    # Writes message to log file in the logs directory.
-    echo "$(date +%H%M%S) - ${message}" >> "${LOG_DIR}/${LOG_FILE}"
-  else
-    # Sends message to script output since it cannot be written to a log file
-    echo "${message}"
-  fi
+  echo "$(date +%H%M%S) - ${1}" >> "${LOG_DIR}/${LOG_FILE}"
 }
 
 # Ensures that the directory exists.
-function validate_dir() {
-  local dir="${1}"
-  if [[ -d "${dir}" ]]; then
-    local result_code=0
-  elif [[ -f "${dir}" ]]; then
-    local result_code=1
+function validate_dir () {
+  if [[ -f "${1}" ]]; then
+    error_handler 1 "The ${dir} is a file."
+  elif [[ -d "${1}" ]]; then
+    logger "The ${1} directory exists."
   else
-    create_dir "${dir}"
-    local result_code=0
+   create_dir "${1}"
   fi
-  result_handler \
-    ${result_code} \
-   "The ${dir} directory exists." \
-   "The ${dir} is a file."
 }
 
 # Creates a directory when it does not exist.
 function create_dir() {
-  local dir="${1}"
-  mkdir "${dir}"
-  local result_code=$?
-  result_handler \
-    ${result_code} \
-    "The ${dir} directory was created." \
-    "The ${dir} directory could not be created."
+  mkdir "${1}"
+  if [[ $? -ne 0 ]]; then
+    error_handler 1 "The ${1} directory could not be created"
+  fi
+  logger "The ${1} dir was created."
 }
 
 # Evalutes if virtual machine is in an expected state.
 function determine_vm_state() {
   vm_state_current="$(virsh domstate ${VM_NAME})"
-  if [[ "${vm_state_current}" == "shut off" || \
-  "${vm_state_current}" == "running" ]]; then
-    local result_code=0
-  else
-    local result_code=1
+  if [[ "${vm_state_current}" != "shut off" || \
+  "${vm_state_current}" != "running" ]]; then
+    error_handler \
+      1 \
+      "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
   fi
-  result_handler \
-    ${result_code} \
-    "The ${VM_NAME} virtual machine is in the ${vm_state_current} state." \
-    "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
+  logger  "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
+
 }
 
 # Starts the virtual machines.
 function start_vm() {
   virsh start "${VM_NAME}"
-  local result_code=$?
-  result_handler \
-    ${result_code} \
-    "The ${VM_NAME} virtual machine was started." \
-    "The ${VM_NAME} virtual machine could not be started."
+  if [[ $? -ne 0 ]]; then
+    error_handler 1 "The ${VM_NAME} virtual machine could not be started."
+  fi
+  logger "The ${VM_NAME} virtual machine was started."
   sleep 10 # TODO(codygriffin): Change to 60 after development
 }
 
@@ -115,7 +89,13 @@ function start_vm() {
 # a blockcommit.
 function disable_apparmor() {
   aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
+  if [[ $? -ne 0 ]]; then
+    error_handler \
+      0 \
+      "The ${VM_NAME} virtual machine AppArmor Profile was already disabled."
+  fi
   logger "The ${VM_NAME} virtual machine AppArmor Profile is disabled."
+
 }
 
 # Creates the external, disk-only snapshot without metadata.
@@ -130,11 +110,10 @@ function create_snapshot() {
     --disk-only \
     --atomic \
     --no-metadata
-  local result_code=$?
-  result_handler \
-    ${result_code} \
-    "The ${new_snapshot_name} snapshot was created." \
-    "The ${new_snapshot_name} snapshot could not be created."
+  if [[ $? -ne 0 ]]; then
+    error_handler 1 "The ${new_snapshot_name} snapshot could not be created."
+  fi
+  logger "The ${new_snapshot_name} snapshot was created."
 }
 
 
