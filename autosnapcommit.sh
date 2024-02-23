@@ -38,14 +38,10 @@ function result_handler() {
   local fail_message="${3}"
   if [[ ${result_code} -eq 0 ]]; then
     logger "${success_message}"
-  elif [[ ${result_code} -ge 1 && ${result_code} -le 255 ]]; then
-    # A hard failure that aborts the process, covering all exit codes.
+  else
     logger "${fail_message}"
     logger "The process was aborted."
     exit 1
-  else
-    # A soft failure that continues the process, beyond the exit codes range.
-    logger "${fail_message}"
   fi
 }
 
@@ -115,15 +111,11 @@ function start_vm() {
   sleep 10 # TODO(codygriffin): Change to 60 after development
 }
 
-# Sets the virtual machine AppArmor Profile to complain which is required
-# before performing a blockcommit.
-function apparmor_complain() {
-  aa-complain "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
-  local result_code=$?
-  result_handler \
-    ${result_code} \
-    "The ${VM_NAME} virtual machine AppArmor Profile was set to complain mode." \
-    "The ${VM_NAME} virtual machine AppArmor Profile could not be set to complain mode."
+# Ensures the virtual machine AppArmor Profile is disabled before performing \
+# a blockcommit.
+function disable_apparmor() {
+  aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
+  logger "The ${VM_NAME} virtual machine AppArmor Profile is disabled."
 }
 
 # Creates the external, disk-only snapshot without metadata.
@@ -145,20 +137,6 @@ function create_snapshot() {
     "The ${new_snapshot_name} snapshot could not be created."
 }
 
-# Sets the virtual machine AppArmor Profile to enforce after performing
-# a blockcommit.
-function apparmor_enforce() {
-  aa-enforce "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
-  local result_code=$?
-  if [[ ${result_code} -eq 1 ]]; then
-    result_code=300
-  fi
-  result_handler \
-    ${result_code} \
-    "The ${VM_NAME} virtual machine AppArmor Profile was set to enforce mode." \
-    "The ${VM_NAME} virtual machine AppArmor Profile could not be set to enforce mode."
-  # TODO(codygriffin): Shutdown and reboot virtual machine if fails
-}
 
 validate_vm "${VM_NAME}"
 
@@ -172,25 +150,23 @@ if [[ "${vm_state_current}" == "shut off" ]]; then
   start_vm
 fi
 
-apparmor_complain
+disable_apparmor
 
 create_snapshot
 
 # perform blockcommit
-local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
-qemu-img info --force-share --backing-chain "${vm_disk[1]}"
-existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}$*") )
+vm_disk_2=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
+qemu-img info --force-share --backing-chain "${vm_disk_2[1]}"
+existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}*") )
 if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
   virsh blockcommit \
     --domain "${VM_NAME}" \
-    --path "${vm_disk[0]}" \
+    --path "${vm_disk_2[0]}" \
     --base "${VM_FILE}" \
     --top "${existing_snapshot_files[0]}" \
     --delete \
     --verbose \
     --wait
 fi
-
-apparmor_enforce
 
 # shutdown virtual machine based on initial vm state
