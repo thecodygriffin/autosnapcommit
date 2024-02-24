@@ -66,8 +66,7 @@ function determine_vm_state() {
   "${vm_state_current}" == "running" ]]; then
     logger "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
   else
-    error_handler \
-      "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
+    error_handler "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
   fi
 }
 
@@ -86,8 +85,7 @@ function start_vm() {
 function disable_apparmor() {
   aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
   if [[ $? -ne 0 ]]; then
-    logger \
-      "The ${VM_NAME} virtual machine AppArmor Profile was already disabled."
+    logger  "The ${VM_NAME} virtual machine AppArmor Profile was already disabled."
   else
     logger "The ${VM_NAME} virtual machine AppArmor Profile is disabled."
   fi
@@ -99,6 +97,8 @@ function perform_blockcommit() {
   qemu-img info --force-share --backing-chain "${vm_disk[1]}"
   # TODO(codygriffin): Determine existing snapshots from backing chain instead of directory.
   existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/*") )
+  logger "There are ${#existing_snapshot_files[@]} snapshots in the backing chain."
+  logger "The number of snapshots to retain the backing chain is ${SNAPSHOTS_TO_RETAIN}".
   if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
     virsh blockcommit \
       --domain "${VM_NAME}" \
@@ -110,8 +110,10 @@ function perform_blockcommit() {
       --wait
   fi
   if [[ $? -ne 0 ]]; then
-    logger "The backing chain could not be reduced." # TODO(codygriffin): Better message
+    logger "The number of existing snapshots were less than or equal to the number to retain."
+    logger "The backing chain was not reduced." # TODO(codygriffin): Better message
   else
+    logger "The number of existing snapshots were greater than the number to retain."
     logger "The backing chain was reduced." # TODO(codygriffin): Better message
   fi
 }
@@ -150,6 +152,7 @@ validate_dir "${SNAPSHOT_DIR}"
 # Determine the current state of the vitual machine.
 readonly vm_state_initial="$(virsh domstate ${VM_NAME})"
 logger "The initial state of the ${VM_NAME} virtual machine is ${vm_state_initial}."
+
 # Call function to validate that the virtual machine is in an expected state.
 determine_vm_state
 
