@@ -5,13 +5,13 @@
 set -x
 # Set constant variables for script.
 VM_NAME="${1}"
-VM_DIR="${2}${VM_NAME}/"
-VM_FILE="${VM_DIR}${VM_NAME}.qcow2"
+VM_DIR="${2}${VM_NAME}"
+VM_FILE="${VM_DIR}/${VM_NAME}.qcow2"
 
-SNAPSHOT_DIR="${VM_DIR}snapshots/"
+SNAPSHOT_DIR="${VM_DIR}/snapshots"
 SNAPSHOTS_TO_RETAIN=${3}
 
-LOG_DIR="${VM_DIR}logs/"
+LOG_DIR="${VM_DIR}/logs"
 LOG_FILE="${VM_NAME}$(date +%Y%m%d%H%M%S).txt"
 
 # Ensures that the virtual machine and its file exist.
@@ -40,7 +40,7 @@ function error_handler() {
 
 # Writes a message to log file.
 function logger() {
-  if [[ -d "${LOG_DIR}/${LOG_FILE}" ]]; then
+  if [[ -d "${LOG_DIR}" ]]; then
     echo "$(date +%H%M%S) - ${1}" >> "${LOG_DIR}/${LOG_FILE}"
   else
     echo "${1}"
@@ -49,9 +49,7 @@ function logger() {
 
 # Ensures that the directory exists.
 function validate_dir () {
-  if [[ -f "${1}" ]]; then
-    error_handler 1 "The ${dir} is a file."
-  elif [[ -d "${1}" ]]; then
+  if [[ -d "${1}" ]]; then
     logger "The ${1} directory exists."
   else
    create_dir "${1}"
@@ -111,7 +109,7 @@ function create_snapshot() {
   virsh snapshot-create-as \
     --domain "${VM_NAME}" \
     --name "${new_snapshot_name}" \
-    --diskspec "${vm_disk[0]}",file="${SNAPSHOT_DIR}${new_snapshot_file}",snapshot=external \
+    --diskspec "${vm_disk[0]}",file="${SNAPSHOT_DIR}/${new_snapshot_file}",snapshot=external \
     --disk-only \
     --atomic \
     --no-metadata
@@ -152,7 +150,7 @@ create_snapshot
 # perform blockcommit
 vm_disk_2=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
 qemu-img info --force-share --backing-chain "${vm_disk_2[1]}"
-existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}*") )
+existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/*") )
 if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
   virsh blockcommit \
     --domain "${VM_NAME}" \
