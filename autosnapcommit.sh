@@ -12,7 +12,7 @@ SNAPSHOT_DIR="${VM_DIR}/snapshots"
 SNAPSHOTS_TO_RETAIN=${3}
 
 LOG_DIR="${VM_DIR}/logs"
-LOG_FILE="${VM_NAME}$(date +%Y%m%d%H%M%S).txt"
+LOG_FILE="${LOG_DIR}/${VM_NAME}$(date +%Y%m%d%H%M%S).txt"
 
 # Ensures that the virtual machine and its file exist.
 function validate_vm() {
@@ -41,7 +41,7 @@ function error_handler() {
 # Writes a message to log file.
 function logger() {
   if [[ -d "${LOG_DIR}" ]]; then
-    echo "$(date +%H%M%S) - ${1}" >> "${LOG_DIR}/${LOG_FILE}"
+    echo "$(date +%H%M%S) - ${1}" >> "${LOG_FILE}"
   else
     echo "${1}"
   fi
@@ -70,7 +70,7 @@ function determine_vm_state() {
   vm_state_current="$(virsh domstate ${VM_NAME})"
   if [[ "${vm_state_current}" == "shut off" || \
   "${vm_state_current}" == "running" ]]; then
-    logger  "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
+    logger "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
   else
     error_handler \
       1 \
@@ -127,11 +127,11 @@ function perform_blockcommit() {
 function create_snapshot() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
   local new_snapshot_name="${VM_NAME}$(date +%Y%m%d%H%M%S)"
-  local new_snapshot_file="${new_snapshot_name}.qcow2"
+  local new_snapshot_file="${SNAPSHOT_DIR}/${new_snapshot_name}.qcow2"
   virsh snapshot-create-as \
     --domain "${VM_NAME}" \
     --name "${new_snapshot_name}" \
-    --diskspec "${vm_disk[0]}",file="${SNAPSHOT_DIR}/${new_snapshot_file}",snapshot=external \
+    --diskspec "${vm_disk[0]}",file="${new_snapshot_file}",snapshot=external \
     --disk-only \
     --atomic \
     --no-metadata
@@ -155,7 +155,7 @@ validate_dir "${SNAPSHOT_DIR}"
 
 # Determine the current state of the vitual machine.
 readonly vm_state_initial="$(virsh domstate ${VM_NAME})"
-
+logger "The initial state of the ${VM_NAME} virtual machine is ${vm_state_initial}."
 # Call function to validate that the virtual machine is in an expected state.
 determine_vm_state
 
