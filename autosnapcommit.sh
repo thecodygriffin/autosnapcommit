@@ -18,24 +18,18 @@ LOG_FILE="${LOG_DIR}/${VM_NAME}$(date +%Y%m%d%H%M%S).txt"
 function validate_vm() {
   local vm_name_regex="\<${1}\>"
   local existing_vm=( $(virsh list --name --all) )
-  if [[  ${existing_vm[@]} =~ ${vm_name_regex} && -f "${VM_FILE}" ]]; then
+  if [[ ${existing_vm[@]} =~ ${vm_name_regex} && -f "${VM_FILE}" ]]; then
     logger "The ${VM_NAME} virtual machine and its ${VM_FILE} exist."
   else
-    logger "The ${VM_NAME} virtual machine and/or its ${VM_FILE} do not exist."
-    exit 1
+    error_handler "The ${VM_NAME} virtual machine and/or its ${VM_FILE} do not exist."
   fi
 }
 
 # Determines whether or not to abort based command outcome.
 function error_handler() {
-  if [[ ${1} -ne 0 ]]; then
-    # Aborts when any value other than 0 is returned.
-    logger "${2}"
-    logger "The process was aborted."
-    exit 1
-  fi
-  # Otherwise does not abort.
-  logger "${2}"
+  logger "${1}"
+  logger "The process was aborted."
+  exit 1
 }
 
 # Writes a message to log file.
@@ -60,7 +54,7 @@ function validate_dir () {
 function create_dir() {
   mkdir "${1}"
   if [[ $? -ne 0 ]]; then
-    error_handler 1 "The ${1} directory could not be created"
+    error_handler "The ${1} directory could not be created"
   fi
   logger "The ${1} dir was created."
 }
@@ -73,7 +67,6 @@ function determine_vm_state() {
     logger "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
   else
     error_handler \
-      1 \
       "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
   fi
 }
@@ -82,7 +75,7 @@ function determine_vm_state() {
 function start_vm() {
   virsh start "${VM_NAME}"
   if [[ $? -ne 0 ]]; then
-    error_handler 1 "The ${VM_NAME} virtual machine could not be started."
+    error_handler "The ${VM_NAME} virtual machine could not be started."
   fi
   logger "The ${VM_NAME} virtual machine was started."
   sleep 10 # TODO(codygriffin): Change to 60 after development
@@ -93,12 +86,11 @@ function start_vm() {
 function disable_apparmor() {
   aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
   if [[ $? -ne 0 ]]; then
-    error_handler \
-      0 \
+    logger \
       "The ${VM_NAME} virtual machine AppArmor Profile was already disabled."
+  else
+    logger "The ${VM_NAME} virtual machine AppArmor Profile is disabled."
   fi
-  logger "The ${VM_NAME} virtual machine AppArmor Profile is disabled."
-
 }
 
 # Performs a blockcommit to reduce backing chain.
@@ -118,9 +110,10 @@ function perform_blockcommit() {
       --wait
   fi
   if [[ $? -ne 0 ]]; then
-    error_handler 0 "The backing chain could not be reduced." # TODO(codygriffin): Better message
+    logger "The backing chain could not be reduced." # TODO(codygriffin): Better message
+  else
+    logger "The backing chain was reduced." # TODO(codygriffin): Better message
   fi
-  logger "The backing chain was reduced." # TODO(codygriffin): Better message
 }
 
 # Creates the external, disk-only snapshot without metadata.
@@ -136,9 +129,10 @@ function create_snapshot() {
     --atomic \
     --no-metadata
   if [[ $? -ne 0 ]]; then
-    error_handler 1 "The ${new_snapshot_name} snapshot could not be created."
+    logger "The ${new_snapshot_name} snapshot could not be created."
+  else
+    logger "The ${new_snapshot_name} snapshot was created."
   fi
-  logger "The ${new_snapshot_name} snapshot was created."
 }
 
 
