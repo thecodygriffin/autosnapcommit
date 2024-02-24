@@ -84,10 +84,10 @@ function start_vm() {
 # a snapshot and performing a blockcommit.
 function disable_apparmor() {
   aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
-  if [[ $? -ne 0 ]]; then
-    logger  "The ${VM_NAME} virtual machine AppArmor Profile was already disabled."
-  else
+  if [[ $? -eq 0 ]]; then
     logger "The ${VM_NAME} virtual machine AppArmor Profile is disabled."
+  else
+    logger  "The ${VM_NAME} virtual machine AppArmor Profile was already disabled."
   fi
 }
 
@@ -96,9 +96,9 @@ function perform_blockcommit() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
   qemu-img info --force-share --backing-chain "${vm_disk[1]}"
   # TODO(codygriffin): Determine existing snapshots from backing chain instead of directory.
-  existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/*") )
-  logger "There are ${#existing_snapshot_files[@]} snapshots in the backing chain."
-  logger "The number of snapshots to retain the backing chain is ${SNAPSHOTS_TO_RETAIN}".
+  existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/"*.qcow2) )
+  logger "There were ${#existing_snapshot_files[@]} snapshots in the backing chain."
+  logger "The number of snapshots to retain in the backing chain are ${SNAPSHOTS_TO_RETAIN}."
   if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
     virsh blockcommit \
       --domain "${VM_NAME}" \
@@ -108,13 +108,12 @@ function perform_blockcommit() {
       --delete \
       --verbose \
       --wait
-  fi
-  if [[ $? -ne 0 ]]; then
-    logger "The number of existing snapshots were less than or equal to the number to retain."
-    logger "The backing chain was not reduced." # TODO(codygriffin): Better message
-  else
+    # TODO(codygriffin): Capture exit code and send to error handler when caught.
     logger "The number of existing snapshots were greater than the number to retain."
-    logger "The backing chain was reduced." # TODO(codygriffin): Better message
+    logger "The backing chain was reduced."
+  else
+    logger "The number of existing snapshots were less than or equal to the number to retain."
+    logger "The backing chain was not reduced."
   fi
 }
 
@@ -130,10 +129,10 @@ function create_snapshot() {
     --disk-only \
     --atomic \
     --no-metadata
-  if [[ $? -ne 0 ]]; then
-    logger "The ${new_snapshot_name} snapshot could not be created."
-  else
+  if [[ $? -eq 0 ]]; then
     logger "The ${new_snapshot_name} snapshot was created."
+  else
+    logger "The ${new_snapshot_name} snapshot could not be created."
   fi
 }
 
