@@ -20,9 +20,10 @@ function validate_vm() {
   local vm_name_regex="\<${1}\>"
   local existing_vm=( $(virsh list --name --all) )
   if [[ !  ${existing_vm[@]} =~ ${vm_name_regex} && -f "${VM_FILE}" ]]; then
-    error handler 1 "The ${VM_NAME} virtual machine and/or its ${VM_FILE} do not exist."
+    echo "The ${VM_NAME} virtual machine and/or its ${VM_FILE} do not exist."
+    exit 1
   fi
-  logger "The ${VM_NAME} virtual machine and its ${VM_FILE} exist."
+  echo "The ${VM_NAME} virtual machine and its ${VM_FILE} exist."
 }
 
 # Determines whether or not to abort based command outcome.
@@ -65,14 +66,14 @@ function create_dir() {
 # Evalutes if virtual machine is in an expected state.
 function determine_vm_state() {
   vm_state_current="$(virsh domstate ${VM_NAME})"
-  if [[ "${vm_state_current}" != "shut off" || \
-  "${vm_state_current}" != "running" ]]; then
+  if [[ "${vm_state_current}" == "shut off" || \
+  "${vm_state_current}" == "running" ]]; then
+    logger  "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
+  else
     error_handler \
       1 \
       "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
   fi
-  logger  "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
-
 }
 
 # Starts the virtual machines.
