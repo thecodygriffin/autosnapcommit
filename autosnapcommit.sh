@@ -101,6 +101,28 @@ function disable_apparmor() {
 
 }
 
+# Performs a blockcommit to reduce backing chain.
+function perform_blockcommit() {
+  local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
+  qemu-img info --force-share --backing-chain "${vm_disk[1]}"
+  # TODO(codygriffin): Determine existing snapshots from backing chain instead of directory.
+  existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/*") )
+  if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
+    virsh blockcommit \
+      --domain "${VM_NAME}" \
+      --path "${vm_disk[0]}" \
+      --base "${VM_FILE}" \
+      --top "${existing_snapshot_files[0]}" \
+      --delete \
+      --verbose \
+      --wait
+  fi
+  if [[ $? -ne 0 ]]; then
+    error_handler 0 "The backing chain could not be reduced." # TODO(codygriffin): Better message
+  fi
+  logger "The backing chain was reduced." # TODO(codygriffin): Better message
+}
+
 # Creates the external, disk-only snapshot without metadata.
 function create_snapshot() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
@@ -118,6 +140,7 @@ function create_snapshot() {
   fi
   logger "The ${new_snapshot_name} snapshot was created."
 }
+
 
 # Call function to validate that the provided virtual machine parameters are
 # valid.
@@ -144,22 +167,10 @@ fi
 # Call function to disable the virtual machine AppArmor Profile.
 disable_apparmor
 
+# Call function to perform a blockcommit.
+perform_blockcommit
+
 # Call function to create the snapshot.
 create_snapshot
 
-# perform blockcommit
-vm_disk_2=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
-qemu-img info --force-share --backing-chain "${vm_disk_2[1]}"
-existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/*") )
-if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
-  virsh blockcommit \
-    --domain "${VM_NAME}" \
-    --path "${vm_disk_2[0]}" \
-    --base "${VM_FILE}" \
-    --top "${existing_snapshot_files[0]}" \
-    --delete \
-    --verbose \
-    --wait
-fi
-
-# shutdown virtual machine based on initial vm state
+# TODO(codygriffin): Shutdown virtual machine based on initial vm state
