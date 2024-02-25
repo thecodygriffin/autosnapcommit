@@ -94,11 +94,11 @@ function disable_apparmor() {
   fi
 }
 
-# Performs a blockcommit to reduce backing chain.
+# Performs a blockcommit to reduce the backing chain.
 function perform_blockcommit() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
   qemu-img info --force-share --backing-chain "${vm_disk[1]}"
-  # TODO(codygriffin): Determine existing snapshots from backing chain instead of directory.
+  # TODO(codygriffin): Determine existing snapshots from the backing chain instead of directory.
   existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/"*.qcow2) )
   logger "There were ${#existing_snapshot_files[@]} snapshots in the backing chain."
   logger "The number of snapshots to retain in the backing chain are ${SNAPSHOTS_TO_RETAIN}."
@@ -139,6 +139,15 @@ function create_snapshot() {
   fi
 }
 
+# Shutdown the virtual machines.
+function shutdown_vm() {
+  virsh shutdown "${VM_NAME}"
+  if [[ $? -ne 0 ]]; then
+    error_handler "The ${VM_NAME} virtual machine could not be shutdown."
+  fi
+  logger "The ${VM_NAME} virtual machine was shutdown."
+}
+
 # Determine the timestamp format for snapshots based on frequency.
 case "${SNAPSHOT_FREQ}" in
   "secondly")
@@ -175,9 +184,11 @@ determine_vm_state
 # Store the intial virtual machine state for later reference.
 readonly vm_state_initial="${vm_state_current}"
 
-# Start the vitual machine if it is not running.
+# Start the vitual machine if it was shut off and send the virtual matchine
+# state to the log once done.
 if [[ "${vm_state_current}" == "shut off" ]]; then
   start_vm
+  determine_vm_state
 fi
 
 # Call function to disable the virtual machine AppArmor Profile.
@@ -189,4 +200,15 @@ perform_blockcommit
 # Call function to create the snapshot.
 create_snapshot
 
-# TODO(codygriffin): Shutdown virtual machine based on initial vm state
+# Call function to validate that the virtual machine is in an expected state
+# after the blockcommit and snapshot have been completed.
+determine_vm_state
+
+# Shutdown the virtual machine if the initial state was shut off and
+# send the final virtual machine state to the log once done.
+if [[ "${vm_state_initial}" == "shut off" ]]; then
+  shutdown_vm
+  determine_vm_state
+fi
+
+
