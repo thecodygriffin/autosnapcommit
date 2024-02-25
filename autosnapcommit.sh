@@ -80,7 +80,7 @@ function start_vm() {
     error_handler "The ${VM_NAME} virtual machine could not be started."
   fi
   logger "The ${VM_NAME} virtual machine was started."
-  sleep 10 # TODO(codygriffin): Change to 60 after development
+  sleep 10 # TODO(codygriffin): Change to 90 after development
 }
 
 # Ensures the virtual machine AppArmor Profile is disabled before creating \
@@ -99,14 +99,13 @@ function determine_blockcommit() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
   qemu-img info --force-share --backing-chain "${vm_disk[1]}"
   # TODO(codygriffin): Determine existing snapshots from the backing chain instead of directory.
-  existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/"*.qcow2) )
+  local existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/"*.qcow2) )
   logger "There were ${#existing_snapshot_files[@]} snapshots in the backing chain."
   logger "The number of snapshots to retain in the backing chain are ${SNAPSHOTS_TO_RETAIN}."
   if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
-    perform_blockcommit ${vm_disk} ${existing_snapshot_file}
-    logger "The backing chain was reduced."
+    perform_blockcommit "${vm_disk[0]}" "${existing_snapshot_files[0]}"
   else
-    logger "The backing chain was not reduced."
+    logger "The backing chain did not need to be reduced."
   fi
 }
 
@@ -114,18 +113,21 @@ function determine_blockcommit() {
 function perform_blockcommit() {
   virsh blockcommit \
     --domain "${VM_NAME}" \
-    --path "${1[0]}" \
+    --path "${1}" \
     --base "${VM_FILE}" \
-    --top "${2[0]}" \
+    --top "${2}" \
     --delete \
     --verbose \
     --wait
   if [[ $? -eq 0 ]]; then
     logger "The blockcommit was successful."
-    logger "The ${2[0]} file was merged into the ${VM_NAME} base file."
+    logger "The ${2} file was merged into the ${VM_FILE} base file."
+    logger "The backing chain was reduced."
+    sleep 10 # TODO(codygriffin): Change to 90 after development
   else
     logger "The blockcommit failed."
-    logger "The ${2[0]} file was not merged into the ${VM_NAME} base file."
+    logger "The ${2} file was not merged into the ${VM_FILE} base file."
+    logger "The backing chain was not reduced."
   fi
 }
 
@@ -143,6 +145,7 @@ function create_snapshot() {
     --no-metadata
   if [[ $? -eq 0 ]]; then
     logger "The ${new_snapshot_name} snapshot was created."
+    sleep 10 # TODO(codygriffin): Change to 90 after development
   else
     logger "The ${new_snapshot_name} snapshot could not be created."
   fi
@@ -155,6 +158,7 @@ function shutdown_vm() {
     error_handler "The ${VM_NAME} virtual machine could not be shutdown."
   fi
   logger "The ${VM_NAME} virtual machine was shutdown."
+  sleep 10 # TODO(codygriffin): Change to 90 after development
 }
 
 # Determine the timestamp format for snapshots based on frequency.
