@@ -98,12 +98,14 @@ function disable_apparmor() {
 function determine_blockcommit() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
   qemu-img info --force-share --backing-chain "${vm_disk[1]}"
-  # TODO(codygriffin): Determine existing snapshots from the backing chain instead of directory.
-  local existing_snapshot_files=( $(echo "${SNAPSHOT_DIR}/"*.qcow2) )
-  logger "There were ${#existing_snapshot_files[@]} snapshots in the backing chain."
+  local backing_chain=( $(sudo qemu-img info \
+    --force-share --backing-chain "${vm_disk[1]}" | \
+    grep image | cut -d: -f2- | tr -d " " | tac) )
+  local existing_snapshot_files=$((${#backing_chain[@]} - 1))
+  logger "There were ${existing_snapshot_files} snapshots in the backing chain."
   logger "The number of snapshots to retain in the backing chain are ${SNAPSHOTS_TO_RETAIN}."
-  if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
-    perform_blockcommit "${vm_disk[0]}" "${existing_snapshot_files[0]}"
+  if [[ ${existing_snapshot_files} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
+    perform_blockcommit "${vm_disk[0]}" "${backing_chain[1]}"
   else
     logger "The backing chain did not need to be reduced."
   fi
