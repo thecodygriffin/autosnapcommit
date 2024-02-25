@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer to run sample-snapshots.service
+
+[Timer]
+Unit=sample-snapshots.service
+OnCalendar=Sun *-*-* 1:00:00
+Persistent=True
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Automatic snapshots for the debiantest virtual machine
+
+[Service]
+ExecStart=/bin/bash /usr/local/sbin/autosnapcommit.sh "debiantest" "/mnt/Home/VirtualMachines" "weekly" 2
+
+[Install]
+WantedBy=multi-user.target
