@@ -105,7 +105,9 @@ function determine_blockcommit() {
   logger "There were ${existing_snapshot_files} snapshots in the backing chain."
   logger "The number of snapshots to retain in the backing chain are ${SNAPSHOTS_TO_RETAIN}."
   if [[ ${existing_snapshot_files} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
-    perform_blockcommit "${vm_disk[0]}" "${backing_chain[1]}"
+    perform_blockcommit \
+      "${vm_disk[0]}" \
+      "${backing_chain[${existing_snapshot_files}-${SNAPSHOTS_TO_RETAIN}]}"
   else
     logger "The backing chain did not need to be reduced."
   fi
