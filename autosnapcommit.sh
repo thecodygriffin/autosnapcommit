@@ -2,7 +2,7 @@
 #
 # Performs the snapshot creation and blockcommit maintenance of virtual
 # machines.
-set-x
+set -x
 # Set constant variables for script.
 VM_NAME="${1}"
 VM_DIR="${2}/${VM_NAME}"
@@ -63,7 +63,7 @@ function create_dir() {
 # Evalutes if virtual machine is in an expected state.
 function determine_vm_state() {
   vm_state_current="$(virsh domstate ${VM_NAME})"
-  case "${vm_state_current"} in
+  case "${vm_state_current}" in
     "shut off" | "running")
       logger "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
       ;;
@@ -73,7 +73,7 @@ function determine_vm_state() {
   esac
 }
 
-# Starts the virtual machines.
+# Starts the virtual machine.
 function start_vm() {
   virsh start "${VM_NAME}"
   if [[ $? -ne 0 ]]; then
@@ -219,5 +219,3 @@ if [[ "${vm_state_initial}" == "shut off" ]]; then
   shutdown_vm
   determine_vm_state
 fi
-
-
