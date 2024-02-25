@@ -94,8 +94,8 @@ function disable_apparmor() {
   fi
 }
 
-# Performs a blockcommit to reduce the backing chain.
-function perform_blockcommit() {
+# Determine whether a blockcommit is necessary.
+function determine_blockcommit() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
   qemu-img info --force-share --backing-chain "${vm_disk[1]}"
   # TODO(codygriffin): Determine existing snapshots from the backing chain instead of directory.
@@ -103,20 +103,29 @@ function perform_blockcommit() {
   logger "There were ${#existing_snapshot_files[@]} snapshots in the backing chain."
   logger "The number of snapshots to retain in the backing chain are ${SNAPSHOTS_TO_RETAIN}."
   if [[ ${#existing_snapshot_files[@]} -gt ${SNAPSHOTS_TO_RETAIN} ]]; then
-    virsh blockcommit \
-      --domain "${VM_NAME}" \
-      --path "${vm_disk[0]}" \
-      --base "${VM_FILE}" \
-      --top "${existing_snapshot_files[0]}" \
-      --delete \
-      --verbose \
-      --wait
-    # TODO(codygriffin): Capture exit code and send to error handler when caught.
-    logger "The number of existing snapshots were greater than the number to retain."
+    perform_blockcommit ${vm_disk} ${existing_snapshot_file}
     logger "The backing chain was reduced."
   else
-    logger "The number of existing snapshots were less than or equal to the number to retain."
     logger "The backing chain was not reduced."
+  fi
+}
+
+# Performs a blockcommit to reduce the backing chain.
+function perform_blockcommit() {
+  virsh blockcommit \
+    --domain "${VM_NAME}" \
+    --path "${1[0]}" \
+    --base "${VM_FILE}" \
+    --top "${2[0]}" \
+    --delete \
+    --verbose \
+    --wait
+  if [[ $? -eq 0 ]]; then
+    logger "The blockcommit was successful."
+    logger "The ${2[0]} file was merged into the ${VM_NAME} base file."
+  else
+    logger "The blockcommit failed."
+    logger "The ${2[0]} file was not merged into the ${VM_NAME} base file."
   fi
 }
 
@@ -195,7 +204,7 @@ fi
 disable_apparmor
 
 # Call function to perform a blockcommit.
-perform_blockcommit
+determine_blockcommit
 
 # Call function to create the snapshot.
 create_snapshot
