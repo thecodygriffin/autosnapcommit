@@ -98,7 +98,7 @@ function disable_apparmor() {
 function determine_blockcommit() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
   qemu-img info --force-share --backing-chain "${vm_disk[1]}"
-  local backing_chain=( $(sudo qemu-img info \
+  local backing_chain=( $(qemu-img info \
     --force-share --backing-chain "${vm_disk[1]}" | \
     grep image | cut -d: -f2- | tr -d " " | tac) )
   local existing_snapshot_files=$((${#backing_chain[@]} - 1))
