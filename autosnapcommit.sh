@@ -2,7 +2,7 @@
 #
 # Performs the snapshot creation and blockcommit maintenance of virtual
 # machines.
-set -x
+
 # Set constant variables for script.
 VM_NAME="${1}"
 VM_DIR="${2}/${VM_NAME}"
@@ -80,10 +80,10 @@ function start_vm() {
     error_handler "The ${VM_NAME} virtual machine could not be started."
   fi
   logger "The ${VM_NAME} virtual machine was started."
-  sleep 10 # TODO(codygriffin): Change to 90 after development
+  sleep 90
 }
 
-# Ensures the virtual machine AppArmor Profile is disabled before creating \
+# Ensures the virtual machine AppArmor Profile is disabled before creating
 # a snapshot and performing a blockcommit.
 function disable_apparmor() {
   aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
@@ -127,19 +127,36 @@ function perform_blockcommit() {
     logger "The blockcommit was successful."
     logger "The ${2} file was merged into the ${VM_FILE} base file."
     logger "The backing chain was reduced."
-    sleep 10 # TODO(codygriffin): Change to 90 after development
   else
     logger "The blockcommit failed."
     logger "The ${2} file was not merged into the ${VM_FILE} base file."
     logger "The backing chain was not reduced."
   fi
+  sleep 10
 }
 
 # Creates the external, disk-only snapshot without metadata.
 function create_snapshot() {
-  local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
+  case "${SNAPSHOT_FREQ}" in
+    "secondly")
+      timestamp="$(date +%Y%m%d%H%M%S)"
+      ;;
+    "minutely")
+      timestamp="$(date +%Y%m%d%H%M)"
+      ;;
+    "hourly")
+      timestamp="$(date +%Y%m%d%H)"
+      ;;
+    "daily" | "weekly")
+      timestamp="$(date +%Y%m%d)"
+      ;;
+    "monthly")
+      timestamp="$(date +%Y%m)"
+      ;;
+  esac
   local new_snapshot_name="${VM_NAME}${timestamp}"
   local new_snapshot_file="${SNAPSHOT_DIR}/${new_snapshot_name}.qcow2"
+  local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
   virsh snapshot-create-as \
     --domain "${VM_NAME}" \
     --name "${new_snapshot_name}" \
@@ -149,49 +166,29 @@ function create_snapshot() {
     --no-metadata
   if [[ $? -eq 0 ]]; then
     logger "The ${new_snapshot_name} snapshot was created."
-    sleep 10 # TODO(codygriffin): Change to 90 after development
   else
     logger "The ${new_snapshot_name} snapshot could not be created."
   fi
+  sleep 10
 }
 
-# Shutdown the virtual machines.
+# Shutdown the virtual machine.
 function shutdown_vm() {
   virsh shutdown "${VM_NAME}"
   if [[ $? -ne 0 ]]; then
     error_handler "The ${VM_NAME} virtual machine could not be shutdown."
   fi
   logger "The ${VM_NAME} virtual machine was shutdown."
-  sleep 10 # TODO(codygriffin): Change to 90 after development
+  sleep 90
 }
 
-# Determine the timestamp format for snapshots based on frequency.
-case "${SNAPSHOT_FREQ}" in
-  "secondly")
-    timestamp="$(date +%Y%m%d%H%M%S)"
-    ;;
-  "minutely")
-    timestamp="$(date +%Y%m%d%H%M)"
-    ;;
-  "hourly")
-    timestamp="$(date +%Y%m%d%H)"
-    ;;
-  "daily" | "weekly")
-    timestamp="$(date +%Y%m%d)"
-    ;;
-  "monthly")
-    timestamp="$(date +%Y%m)"
-    ;;
-esac
-
-# Call function to validate that the provided virtual machine parameters are
-# valid.
+# Call function to validate that the virtual machine parameters provided.
 validate_vm "${VM_NAME}"
 
-# Call function to validate logs directory exists and creat it if it does not.
+# Call function to validate logs directory exists and create it if it does not.
 validate_dir "${LOG_DIR}"
 
-# Call function to validate snapshot directory exists and create it if it
+# Call function to validate snapshots directory exists and create it if it
 # does not.
 validate_dir "${SNAPSHOT_DIR}"
 
@@ -201,8 +198,7 @@ determine_vm_state
 # Store the intial virtual machine state for later reference.
 readonly vm_state_initial="${vm_state_current}"
 
-# Start the vitual machine if it was shut off and send the virtual matchine
-# state to the log once done.
+# Start the vitual machine if it was shut off.
 if [[ "${vm_state_current}" == "shut off" ]]; then
   start_vm
   determine_vm_state
@@ -210,8 +206,9 @@ fi
 
 # Call function to disable the virtual machine AppArmor Profile.
 disable_apparmor
+# TODO(codygriffin): Figure out AppArmor / libvirt issue and then remove.
 
-# Call function to perform a blockcommit.
+# Call function to determine if a blockcommit is necessary and perform if so.
 determine_blockcommit
 
 # Call function to create the snapshot.
