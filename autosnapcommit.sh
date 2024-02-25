@@ -63,12 +63,14 @@ function create_dir() {
 # Evalutes if virtual machine is in an expected state.
 function determine_vm_state() {
   vm_state_current="$(virsh domstate ${VM_NAME})"
-  if [[ "${vm_state_current}" == "shut off" || \
-  "${vm_state_current}" == "running" ]]; then
-    logger "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
-  else
-    error_handler "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
-  fi
+  case "${vm_state_current"} in
+    "shut off" | "running")
+      logger "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
+      ;;
+    *)
+      error_handler "The ${VM_NAME} virtual machine is in an unexpected ${vm_state_current} state."
+      ;;
+  esac
 }
 
 # Starts the virtual machines.
@@ -167,12 +169,11 @@ validate_dir "${LOG_DIR}"
 # does not.
 validate_dir "${SNAPSHOT_DIR}"
 
-# Determine the current state of the vitual machine.
-readonly vm_state_initial="$(virsh domstate ${VM_NAME})"
-logger "The initial state of the ${VM_NAME} virtual machine is ${vm_state_initial}."
-
 # Call function to validate that the virtual machine is in an expected state.
 determine_vm_state
+
+# Store the intial virtual machine state for later reference.
+readonly vm_state_initial="${vm_state_current}"
 
 # Start the vitual machine if it is not running.
 if [[ "${vm_state_current}" == "shut off" ]]; then
