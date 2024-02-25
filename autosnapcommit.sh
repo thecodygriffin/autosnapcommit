@@ -2,14 +2,15 @@
 #
 # Performs the snapshot creation and blockcommit maintenance of virtual
 # machines.
-set -x
+set-x
 # Set constant variables for script.
 VM_NAME="${1}"
-VM_DIR="${2}${VM_NAME}"
+VM_DIR="${2}/${VM_NAME}"
 VM_FILE="${VM_DIR}/${VM_NAME}.qcow2"
 
 SNAPSHOT_DIR="${VM_DIR}/snapshots"
-SNAPSHOTS_TO_RETAIN=${3}
+SNAPSHOT_FREQ=${3}
+SNAPSHOTS_TO_RETAIN=${4}
 
 LOG_DIR="${VM_DIR}/logs"
 LOG_FILE="${LOG_DIR}/${VM_NAME}$(date +%Y%m%d%H%M%S).txt"
@@ -25,7 +26,7 @@ function validate_vm() {
   fi
 }
 
-# Determines whether or not to abort based command outcome.
+# Aborts the process after sending message to log file.
 function error_handler() {
   logger "${1}"
   logger "The process was aborted."
@@ -120,7 +121,7 @@ function perform_blockcommit() {
 # Creates the external, disk-only snapshot without metadata.
 function create_snapshot() {
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
-  local new_snapshot_name="${VM_NAME}$(date +%Y%m%d%H%M%S)"
+  local new_snapshot_name="${VM_NAME}${timestamp}"
   local new_snapshot_file="${SNAPSHOT_DIR}/${new_snapshot_name}.qcow2"
   virsh snapshot-create-as \
     --domain "${VM_NAME}" \
@@ -136,6 +137,24 @@ function create_snapshot() {
   fi
 }
 
+# Determine the timestamp format for snapshots based on frequency.
+case "${SNAPSHOT_FREQ}" in
+  "secondly")
+    timestamp="$(date +%Y%m%d%H%M%S)"
+    ;;
+  "minutely")
+    timestamp="$(date +%Y%m%d%H%M)"
+    ;;
+  "hourly")
+    timestamp="$(date +%Y%m%d%H)"
+    ;;
+  "daily" | "weekly")
+    timestamp="$(date +%Y%m%d)"
+    ;;
+  "monthly")
+    timestamp="$(date +%Y%m)"
+    ;;
+esac
 
 # Call function to validate that the provided virtual machine parameters are
 # valid.
@@ -144,7 +163,7 @@ validate_vm "${VM_NAME}"
 # Call function to validate logs directory exists and creat it if it does not.
 validate_dir "${LOG_DIR}"
 
-# Call function to validate snapshot directory exists and create it if i
+# Call function to validate snapshot directory exists and create it if it
 # does not.
 validate_dir "${SNAPSHOT_DIR}"
 
