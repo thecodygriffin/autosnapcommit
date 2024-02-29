@@ -19,7 +19,7 @@ LOG_FILE="${LOG_DIR}/${VM_NAME}$(date +%Y%m%d%H%M%S).txt"
 function validate_vm() {
   local vm_name_regex="\<${1}\>"
   local existing_vm=( $(virsh list --name --all) )
-  if [[ ${existing_vm[@]} =~ ${vm_name_regex} && -f "${VM_FILE}" ]]; then
+  if [[ ${existing_vm[*]} =~ ${vm_name_regex} && -f "${VM_FILE}" ]]; then
     logger "The ${VM_NAME} virtual machine and its ${VM_FILE} exist."
   else
     error_handler "The ${VM_NAME} virtual machine and/or its ${VM_FILE} do not exist."
