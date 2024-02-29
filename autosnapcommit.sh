@@ -116,11 +116,11 @@ function determine_blockcommit() {
 
 # Performs a blockcommit to reduce the backing chain.
 function perform_blockcommit() {
-  local vm_disk="${1}"
+  local path="${1}"
   local snapshot_file="${2}"
   if virsh blockcommit \
     --domain "${VM_NAME}" \
-    --path "${vm_disk}" \
+    --path "${path}" \
     --base "${VM_FILE}" \
     --top "${snapshot_file}" \
     --delete \
