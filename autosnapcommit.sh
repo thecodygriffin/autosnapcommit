@@ -62,7 +62,7 @@ function create_dir() {
 
 # Evalutes if virtual machine is in an expected state.
 function determine_vm_state() {
-  vm_state_current="$(virsh domstate ${VM_NAME})"
+  vm_state_current="$(virsh domstate "${VM_NAME}")"
   case "${vm_state_current}" in
     "shut off" | "running")
       logger "The ${VM_NAME} virtual machine is in the ${vm_state_current} state."
@@ -86,7 +86,7 @@ function start_vm() {
 # Ensures the virtual machine AppArmor Profile is disabled before creating
 # a snapshot and performing a blockcommit.
 function disable_apparmor() {
-  aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid $VM_NAME)"
+  aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid "${VM_NAME}")"
   if [[ $? -eq 0 ]]; then
     logger "The ${VM_NAME} virtual machine AppArmor Profile is disabled."
   else
