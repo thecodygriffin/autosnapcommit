@@ -28,35 +28,39 @@ function validate_vm() {
 
 # Aborts the process after sending message to log file.
 function error_handler() {
-  logger "${1}"
+  local message="${1}"
+  logger "${message}"
   logger "The process was aborted."
   exit 1
 }
 
 # Writes a message to log file.
 function logger() {
+  local message="${1}"
   if [[ -d "${LOG_DIR}" ]]; then
-    echo "$(date +%H%M%S) - ${1}" >> "${LOG_FILE}"
+    echo "$(date +%H%M%S) - ${message}" >> "${LOG_FILE}"
   else
-    echo "${1}"
+    echo "${message}"
   fi
 }
 
 # Ensures that the directory exists.
 function validate_dir () {
-  if [[ -d "${1}" ]]; then
-    logger "The ${1} directory exists."
+  local dir="${1}"
+  if [[ -d "${dir}" ]]; then
+    logger "The ${dir} directory exists."
   else
-   create_dir "${1}"
+   create_dir "${dir}"
   fi
 }
 
 # Creates a directory when it does not exist.
 function create_dir() {
-  if ! mkdir "${1}"; then
-    error_handler "The ${1} directory could not be created"
+  local dir="${1}"
+  if ! mkdir "${dir}"; then
+    error_handler "The ${dir} directory could not be created"
   fi
-  logger "The ${1} dir was created."
+  logger "The ${dir} dir was created."
 }
 
 # Evalutes if virtual machine is in an expected state.
@@ -112,20 +116,22 @@ function determine_blockcommit() {
 
 # Performs a blockcommit to reduce the backing chain.
 function perform_blockcommit() {
+  local vm_disk="${1}"
+  local snapshot_file="${2}"
   if virsh blockcommit \
     --domain "${VM_NAME}" \
-    --path "${1}" \
+    --path "${vm_disk}" \
     --base "${VM_FILE}" \
-    --top "${2}" \
+    --top "${snapshot_file}" \
     --delete \
     --verbose \
     --wait; then
     logger "The blockcommit was successful."
-    logger "The ${2} file was merged into the ${VM_FILE} base file."
+    logger "The ${snapshot_file} file was merged into the ${VM_FILE} base file."
     logger "The backing chain was reduced."
   else
     logger "The blockcommit failed."
-    logger "The ${2} file was not merged into the ${VM_FILE} base file."
+    logger "The ${snapshot_file} file was not merged into the ${VM_FILE} base file."
     logger "The backing chain was not reduced."
   fi
   sleep 10
