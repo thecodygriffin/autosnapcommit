@@ -53,8 +53,7 @@ function validate_dir () {
 
 # Creates a directory when it does not exist.
 function create_dir() {
-  mkdir "${1}"
-  if [[ $? -ne 0 ]]; then
+  if ! mkdir "${1}"; then
     error_handler "The ${1} directory could not be created"
   fi
   logger "The ${1} dir was created."
@@ -75,8 +74,7 @@ function determine_vm_state() {
 
 # Starts the virtual machine.
 function start_vm() {
-  virsh start "${VM_NAME}"
-  if [[ $? -ne 0 ]]; then
+  if ! virsh start "${VM_NAME}"; then
     error_handler "The ${VM_NAME} virtual machine could not be started."
   fi
   logger "The ${VM_NAME} virtual machine was started."
@@ -86,8 +84,7 @@ function start_vm() {
 # Ensures the virtual machine AppArmor Profile is disabled before creating
 # a snapshot and performing a blockcommit.
 function disable_apparmor() {
-  aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid "${VM_NAME}")"
-  if [[ $? -eq 0 ]]; then
+  if aa-disable "/etc/apparmor.d/libvirt/libvirt-$(virsh domuuid "${VM_NAME}")"; then
     logger "The ${VM_NAME} virtual machine AppArmor Profile is disabled."
   else
     logger  "The ${VM_NAME} virtual machine AppArmor Profile was already disabled."
@@ -115,15 +112,14 @@ function determine_blockcommit() {
 
 # Performs a blockcommit to reduce the backing chain.
 function perform_blockcommit() {
-  virsh blockcommit \
+  if virsh blockcommit \
     --domain "${VM_NAME}" \
     --path "${1}" \
     --base "${VM_FILE}" \
     --top "${2}" \
     --delete \
     --verbose \
-    --wait
-  if [[ $? -eq 0 ]]; then
+    --wait; then
     logger "The blockcommit was successful."
     logger "The ${2} file was merged into the ${VM_FILE} base file."
     logger "The backing chain was reduced."
@@ -157,14 +153,13 @@ function create_snapshot() {
   local new_snapshot_name="${VM_NAME}${timestamp}"
   local new_snapshot_file="${SNAPSHOT_DIR}/${new_snapshot_name}.qcow2"
   local vm_disk=( $(virsh domblklist "${VM_NAME}" | grep "${VM_DIR}") )
-  virsh snapshot-create-as \
+  if virsh snapshot-create-as \
     --domain "${VM_NAME}" \
     --name "${new_snapshot_name}" \
     --diskspec "${vm_disk[0]}",file="${new_snapshot_file}",snapshot=external \
     --disk-only \
     --atomic \
-    --no-metadata
-  if [[ $? -eq 0 ]]; then
+    --no-metadata; then
     logger "The ${new_snapshot_name} snapshot was created."
   else
     logger "The ${new_snapshot_name} snapshot could not be created."
@@ -174,8 +169,7 @@ function create_snapshot() {
 
 # Shutdown the virtual machine.
 function shutdown_vm() {
-  virsh shutdown "${VM_NAME}"
-  if [[ $? -ne 0 ]]; then
+  if ! virsh shutdown "${VM_NAME}"; then
     error_handler "The ${VM_NAME} virtual machine could not be shutdown."
   fi
   logger "The ${VM_NAME} virtual machine was shutdown."
